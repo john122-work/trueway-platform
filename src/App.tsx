@@ -19,17 +19,28 @@ export default function App() {
   const [odds, setOdds] = useState<number>(1.95);
   const [betMessage, setBetMessage] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  
+  // Wallet State
+  const [balance, setBalance] = useState<number>(100.00);
 
   useEffect(() => {
+    // Check backend health
     fetch(`${BACKEND_URL}/health`)
       .then((res) => res.json())
       .then((data) => setHealthStatus(data.message))
       .catch(() => setHealthStatus('Backend offline or waking up...'));
 
+    // Fetch matches with multi-format fallback parsing
     fetch(`${BACKEND_URL}/api/sportsbook/matches`)
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data)) setMatches(data);
+        if (Array.isArray(data)) {
+          setMatches(data);
+        } else if (data && Array.isArray(data.data)) {
+          setMatches(data.data);
+        } else if (data && Array.isArray(data.matches)) {
+          setMatches(data.matches);
+        }
       })
       .catch((err) => console.error('Error fetching matches:', err));
   }, []);
@@ -37,6 +48,11 @@ export default function App() {
   const handlePlaceBet = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMatch) return;
+
+    if (stake > balance) {
+      setBetMessage('Insufficient wallet balance!');
+      return;
+    }
 
     setLoading(true);
     setBetMessage('');
@@ -56,6 +72,7 @@ export default function App() {
       const data = await response.json();
 
       if (response.ok) {
+        setBalance((prev) => prev - Number(stake));
         setBetMessage(`Bet placed successfully! Bet ID: ${data.bet?.id || 'Confirmed'}`);
       } else {
         setBetMessage(`Failed to place bet: ${data.message || 'Error occurred'}`);
@@ -67,20 +84,40 @@ export default function App() {
     }
   };
 
+  const handleDeposit = () => {
+    setBalance((prev) => prev + 50);
+  };
+
   return (
     <div style={{ padding: '30px', fontFamily: 'sans-serif', backgroundColor: '#0f172a', color: '#fff', minHeight: '100vh' }}>
-      <header style={{ borderBottom: '1px solid #334155', paddingBottom: '15px', marginBottom: '25px' }}>
-        <h1 style={{ color: '#38bdf8', margin: 0 }}>TRUEWAY Sportsbook & Casino</h1>
-        <p style={{ color: '#94a3b8', marginTop: '5px' }}>
-          Backend Status: <span style={{ color: '#4ade80' }}>{healthStatus}</span>
-        </p>
+      <header style={{ borderBottom: '1px solid #334155', paddingBottom: '15px', marginBottom: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 style={{ color: '#38bdf8', margin: 0 }}>TRUEWAY Sportsbook & Casino</h1>
+          <p style={{ color: '#94a3b8', marginTop: '5px', marginBottom: 0 }}>
+            Backend Status: <span style={{ color: '#4ade80' }}>{healthStatus}</span>
+          </p>
+        </div>
+
+        {/* Live Wallet Component */}
+        <div style={{ backgroundColor: '#1e293b', border: '1px solid #334155', padding: '10px 18px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div>
+            <span style={{ fontSize: '12px', color: '#94a3b8', display: 'block' }}>Wallet Balance</span>
+            <strong style={{ fontSize: '18px', color: '#4ade80' }}>${balance.toFixed(2)}</strong>
+          </div>
+          <button
+            onClick={handleDeposit}
+            style={{ padding: '6px 12px', backgroundColor: '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            + $50
+          </button>
+        </div>
       </header>
 
       <main style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '20px' }}>
         <section>
           <h2>Active Matches</h2>
           {matches.length === 0 ? (
-            <p style={{ color: '#94a3b8' }}>Loading matches...</p>
+            <p style={{ color: '#94a3b8' }}>Loading matches from database...</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {matches.map((match) => (
